@@ -1,26 +1,25 @@
 import Cart from "../models/cart.model.js";
 import Order from "../models/order.model.js";
-import Product from "../models/product.model.js";
 
 export const placeOrder = async (req, res) => {
   try {
-    // 1. Fetch cart items
-    const cartItems = await Cart.find().populate("product");
+    // 1️⃣ Get single cart with products
+    const cart = await Cart.findOne().populate("items.product");
 
-    if (cartItems.length === 0) {
+    if (!cart || cart.items.length === 0) {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
-    // 2. Calculate totals
+    // 2️⃣ Calculate totals
     let subtotal = 0;
 
-    const orderItems = cartItems.map((item) => {
-      subtotal += item.product.price * item.quantity;
+    const orderItems = cart.items.map((item) => {
+      subtotal += item.price * item.quantity;
 
       return {
         product: item.product._id,
-        name: item.product.name,
-        price: item.product.price,
+        name: item.name,
+        price: item.price,
         quantity: item.quantity,
       };
     });
@@ -28,7 +27,7 @@ export const placeOrder = async (req, res) => {
     const tax = +(subtotal * 0.05).toFixed(2);
     const totalAmount = subtotal + tax;
 
-    // 3. Save order
+    // 3️⃣ Save order
     const order = await Order.create({
       items: orderItems,
       subtotal,
@@ -36,22 +35,16 @@ export const placeOrder = async (req, res) => {
       totalAmount,
     });
 
-    // 4. Reduce product stock
-    for (const item of cartItems) {
-      await Product.findByIdAndUpdate(item.product._id, {
-        $inc: { stock: -item.quantity },
-      });
-    }
-
-    // 5. Clear cart
-    await Cart.deleteMany();
+    // 4️⃣ Clear cart
+    cart.items = [];
+    await cart.save();
 
     res.status(201).json({
       message: "Order placed successfully",
       order,
     });
   } catch (error) {
-    console.error(error);
+    console.error("ORDER ERROR:", error);
     res.status(500).json({ message: "Order failed" });
   }
 };
